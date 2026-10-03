@@ -151,6 +151,37 @@ export interface ChartSeries {
   readonly groups: number;
 }
 
+/** One cell, in full: what the grid shows cut to a line. */
+export interface CellDetail {
+  readonly id: number;
+  readonly order: number;
+  readonly row: number;
+  readonly column: number;
+  readonly name: string;
+  readonly type: string;
+  /** The value as text, or null for NULL. Nested values are JSON. */
+  readonly value: string | null;
+  readonly json: boolean;
+  /** True when the value was longer than the panel is sent, and was cut. */
+  readonly cut: boolean;
+}
+
+/** A block of cells, by row and column, inclusive. */
+export interface CellRange {
+  readonly id: number;
+  readonly order: number;
+  readonly firstRow: number;
+  readonly lastRow: number;
+  readonly firstColumn: number;
+  readonly lastColumn: number;
+}
+
+/** Text for the clipboard, built by the application worker for a range too big to hold on screen. */
+export interface ClipboardText {
+  readonly serial: number;
+  readonly text: string;
+}
+
 export const NO_CHART: ChartSeries = { id: 0, order: 0, label: '', value: '', points: [], groups: 0 };
 
 /** A column's profile, for the panel that opens from its header. */
@@ -196,6 +227,8 @@ export interface WorkbenchView {
   readonly profile: ColumnProfile | null;
   readonly download: Download | null;
   readonly notice: Notice | null;
+  readonly cell: CellDetail | null;
+  readonly clipboard: ClipboardText | null;
 }
 
 export interface WorkbenchCommands {
@@ -215,6 +248,10 @@ export interface WorkbenchCommands {
   profile(request: { id: number; column: number } | null): void;
   /** Writes the whole result as CSV and asks the shell to save it. */
   exportCsv(request: { id: number }): void;
+  /** Reads one cell in full, for the value panel; null closes it. */
+  cell(request: { id: number; order: number; row: number; column: number } | null): void;
+  /** Builds tab-separated text for a range, with the column names first if asked. */
+  copy(request: CellRange & { headers: boolean }): void;
 }
 
 export const Workbench = channel<WorkbenchView, WorkbenchCommands>('workbench', {
@@ -227,6 +264,8 @@ export const Workbench = channel<WorkbenchView, WorkbenchCommands>('workbench', 
   engine: { version: '', bundle: '' },
   chart: NO_CHART,
   profile: null,
+  cell: null,
+  clipboard: null,
   download: null,
   notice: null
 });

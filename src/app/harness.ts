@@ -1,4 +1,6 @@
-import { createChannelRegistry, createComponent, type ComponentType } from 'gesso-framework';
+import { createChannelRegistry, createComponent, ServiceRegistry, type ComponentType } from 'gesso-framework';
+
+import { LayoutMemory } from './LayoutMemory';
 import { renderTest, type Rendered } from 'gesso-testing';
 
 import { openNodeDatabase } from '../data/NodeDatabase';
@@ -36,10 +38,13 @@ export async function mount(component: ComponentType, options: { rows?: number; 
   const service = new WorkbenchService({ open: openNodeDatabase, store: new MemoryStore(), sampleRows: options.rows ?? 5_000, pageSize: 64 });
   await service.start();
   const channels = createChannelRegistry([workbenchChannel(service) as never]);
+  const services = new ServiceRegistry();
+  services.register(LayoutMemory);
   const ui = renderTest(createComponent(component, {}), {
     width: options.width ?? 1200,
     height: options.height ?? 800,
-    channels: channels.registry
+    channels: channels.registry,
+    services
   });
   await flush(ui);
   return {

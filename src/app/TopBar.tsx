@@ -124,16 +124,30 @@ export function TopBar(inputs: Inputs<TopBarProps>, ctx: ComponentContext) {
     ])
   );
 
-  const activity = combineLatest([run, elapsed]).pipe(
-    map(([state, ms]) => {
-      if (state.phase === 'running') {
+  /**
+   * What is happening, built once per phase and bound inside, so the ten
+   * ticks a second change one string rather than rebuild the spinner.
+   *
+   * There is no percentage. DuckDB-WASM reports progress only to a
+   * statement run in one call, and the statements here are run in steps
+   * so that Cancel can interrupt them; Cancel is worth more.
+   */
+  const runningText = elapsed.pipe(map(ms => `Running · ${formatMs(ms)}`));
+  const activity = run.pipe(
+    map(state => state.phase),
+    distinctUntilChanged(),
+    map(phase => {
+      if (phase === 'running') {
         return [
           <Spinner key="spin" size={16} label="Running" />,
-          <text key="time" text={`Running · ${formatMs(ms)}`} fontSize={12} color="text" fontFamily="ui-monospace, Menlo, monospace" selectable={false} />
+          <text key="time" text={runningText} fontSize={12} color="text" fontFamily="ui-monospace, Menlo, monospace" selectable={false} />
         ];
       }
-      if (state.phase === 'starting') {
-        return [<Spinner key="spin" size={16} label="Starting" />, <text key="message" text={state.message} fontSize={12} color="textMuted" selectable={false} />];
+      if (phase === 'starting') {
+        return [
+          <Spinner key="spin" size={16} label="Starting" />,
+          <text key="message" text={run.pipe(map(state => state.message))} fontSize={12} color="textMuted" selectable={false} />
+        ];
       }
       return [];
     })

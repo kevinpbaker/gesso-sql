@@ -5,6 +5,7 @@ import { SplitPane, Toast } from 'gesso-components';
 import { internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { Workbench } from './Contract';
+import { LayoutMemory } from './LayoutMemory';
 import { ResultsPanel } from './ResultsPanel';
 import { session as createSession } from './session';
 import { SidePanel } from './SidePanel';
@@ -26,6 +27,7 @@ import { TopBar } from './TopBar';
 export function WorkbenchApp(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const workbench = ctx.channel(Workbench);
   const session = createSession(ctx);
+  const layout = ctx.inject(LayoutMemory);
 
   const drop = dropTarget({
     accepts: EXTERNAL_FILES,
@@ -55,7 +57,8 @@ export function WorkbenchApp(_inputs: Inputs<{}>, ctx: ComponentContext) {
       <TopBar session={session} />
       <box flex={1} minHeight={0} width={percent(100)}>
         <SplitPane
-          defaultSplit={0.2}
+          split={layout.pick('sideSplit')}
+          onSplitChange={next => layout.update({ sideSplit: next })}
           min={0.12}
           max={0.45}
           label="Resize the side panel"
@@ -63,7 +66,8 @@ export function WorkbenchApp(_inputs: Inputs<{}>, ctx: ComponentContext) {
           second={
             <SplitPane
               direction="column"
-              defaultSplit={0.42}
+              split={layout.pick('editorSplit')}
+              onSplitChange={next => layout.update({ editorSplit: next })}
               min={0.15}
               max={0.85}
               label="Resize the editor"

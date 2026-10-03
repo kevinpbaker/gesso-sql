@@ -1,4 +1,4 @@
-import { combineLatest, map } from 'rxjs';
+import { combineLatest, distinctUntilChanged, map } from 'rxjs';
 
 import { percent } from 'gesso-core';
 import { Button, Icon, Tabs, Tree, type TabDefinition, type TreeNode } from 'gesso-components';
@@ -8,6 +8,7 @@ import { needsQuotes, quoteIdentifier } from '../sql/complete';
 import { Workbench, type HistoryEntry, type SchemaTableView } from './Contract';
 import { ago, formatCount, formatMs } from './format';
 import { ICONS } from './icons';
+import { LayoutMemory } from './LayoutMemory';
 import type { Session } from './session';
 import { MONO } from './SqlEditor';
 
@@ -30,13 +31,21 @@ const TABS: readonly TabDefinition[] = [
 ];
 
 export function SidePanel(inputs: Inputs<SidePanelProps>, ctx: ComponentContext) {
-  const tab = internalState('schema');
+  const layout = ctx.inject(LayoutMemory);
+  const tab = layout.pick('sideTab');
   const body = tab.pipe(
+    distinctUntilChanged(),
     map(value => [value === 'history' ? <HistoryList key="history" session={inputs.session.value} /> : <SchemaTree key="schema" session={inputs.session.value} />])
   );
   return (
     <column width={percent(100)} height={percent(100)} backgroundColor="surface">
-      <Tabs tabs={TABS} value={tab} onChange={next => (tab.value = next)} label="Side panel" flex={1} minHeight={0}>
+      <Tabs
+        tabs={TABS}
+        value={tab}
+        onChange={next => layout.update({ sideTab: next === 'history' ? 'history' : 'schema' })}
+        label="Side panel"
+        flex={1}
+        minHeight={0}>
         <column flex={1} minHeight={0} width={percent(100)}>
           {body}
         </column>

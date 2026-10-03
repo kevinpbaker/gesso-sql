@@ -9,6 +9,7 @@
 import { renderRoot } from 'gesso-framework';
 
 import { Workbench } from './app/Contract';
+import { LayoutMemory } from './app/LayoutMemory';
 import { AppRoot, ROUTES, WORKBENCH } from './app/Routes';
 
-renderRoot(AppRoot).useChannel(Workbench).useRoutes({ routes: ROUTES, notFound: WORKBENCH });
+renderRoot(AppRoot).useChannel(Workbench).useService(LayoutMemory).useRoutes({ routes: ROUTES, notFound: WORKBENCH });

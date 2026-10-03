@@ -2,9 +2,10 @@ import { BehaviorSubject, map } from 'rxjs';
 
 import { Box, Column, LazySheet, percent, Row, Text, type SheetRange, type UiElement, type UiKeyboardEvent, type UiNode, type UiPointerEvent, type UiVirtualSheet } from 'gesso-core';
 import { Icon } from 'gesso-components';
-import { createComponent, fanOut, FocusService, internalState, ShellService, type ComponentContext, type Inputs } from 'gesso-framework';
+import { createComponent, fanOut, FocusService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { Workbench, type ResultSort, type ResultView } from './Contract';
+import { LayoutMemory } from './LayoutMemory';
 import { ICONS } from './icons';
 
 /**
@@ -31,7 +32,14 @@ export interface ResultGridProps {
   readonly result: ResultView;
   /** Opens a column's profile. */
   readonly onProfile: (column: number) => void;
+  /** The cell the keyboard is on, as it moves; null when nothing is selected. */
+  readonly onFocusCell?: (at: { row: number; column: number } | null) => void;
+  /** Enter, or a double click: show this cell's value in full. */
+  readonly onOpenCell?: (at: { row: number; column: number }) => void;
 }
+
+/** The wash over a selected range. Translucent, so the row stripes show through it. */
+const RANGE_WASH = 'rgba(66, 133, 244, 0.16)';
 
 export const ROW_HEIGHT = 26;
 const HEADER_HEIGHT = 42;
@@ -52,16 +60,34 @@ interface Selected {
   readonly column: number;
 }
 
+/** Where a selection started and where it has been extended to; the keyboard is on `focus`. */
+interface Selection {
+  readonly anchor: Selected;
+  readonly focus: Selected;
+}
+
+function bounds(selection: Selection): { top: number; bottom: number; left: number; right: number } {
+  return {
+    top: Math.min(selection.anchor.row, selection.focus.row),
+    bottom: Math.max(selection.anchor.row, selection.focus.row),
+    left: Math.min(selection.anchor.column, selection.focus.column),
+    right: Math.max(selection.anchor.column, selection.focus.column)
+  };
+}
+
 export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContext) {
   const workbench = ctx.channel(Workbench);
-  const shell = ctx.inject(ShellService);
   const focus = ctx.inject(FocusService);
   const result = inputs.result.value;
   const columns = result.columns;
   const columnCount = columns.length;
   const gutterWidth = Math.max(56, String(result.rowCount).length * 8 + 24);
 
-  const widths = columns.map(column => new BehaviorSubject(column.width));
+  // A column a person sized before keeps that size in the next result
+  // that has it; see LayoutMemory.
+  const layout = ctx.inject(LayoutMemory);
+  const startWidths = columns.map(column => layout.widthOf(column.name) ?? column.width);
+  const widths = startWidths.map(width => new BehaviorSubject(width));
   const keyOf = (row: number, column: number): number => row * columnCount + column;
 
   /** The order the window must belong to; anything else is stale and drawn as waiting. */
@@ -91,15 +117,37 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
     { initial: 'textMuted', label: 'result tones' }
   );
 
-  const selection = new BehaviorSubject<Selected | null>(null);
-  const chosen = fanOut(selection, (held, key) => (held !== null && keyOf(held.row, held.column) === key ? 'focusRing' : 'transparent'), {
-    initial: 'transparent',
-    changed: (next, previous) => [
-      ...(next === null ? [] : [keyOf(next.row, next.column)]),
-      ...(previous === null || previous === undefined ? [] : [keyOf(previous.row, previous.column)])
-    ],
-    label: 'result selection'
-  });
+  const selection = new BehaviorSubject<Selection | null>(null);
+  const chosen = fanOut(
+    selection,
+    (held, key) => (held !== null && keyOf(held.focus.row, held.focus.column) === key ? 'focusRing' : 'transparent'),
+    {
+      initial: 'transparent',
+      changed: (next, previous) => [
+        ...(next === null ? [] : [keyOf(next.focus.row, next.focus.column)]),
+        ...(previous === null || previous === undefined ? [] : [keyOf(previous.focus.row, previous.focus.column)])
+      ],
+      label: 'result selection'
+    }
+  );
+  /**
+   * The wash over a range. Every live cell is asked on a change, which is
+   * a screenful, and a cell outside both the old range and the new one
+   * reads the same as before and is not pushed.
+   */
+  const ranged = fanOut(
+    selection,
+    (held, _key, datum: Datum) => {
+      if (held === null || (held.anchor.row === held.focus.row && held.anchor.column === held.focus.column)) {
+        return 'transparent';
+      }
+      const box = bounds(held);
+      return datum.row >= box.top && datum.row <= box.bottom && datum.column >= box.left && datum.column <= box.right
+        ? RANGE_WASH
+        : 'transparent';
+    },
+    { initial: 'transparent', label: 'result range' }
+  );
 
   // ------------------------------------------------------------------ cells
 
@@ -126,8 +174,16 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
         y: 'center',
         borderColor: chosen.for(key),
         borderWidth: 2,
+        backgroundColor: ranged.for(key, datum),
         role: 'cell',
-        onPointerDown: () => select({ row, column })
+        onPointerDown: (event: UiPointerEvent) => select({ row, column }, event.modifiers.shift === true),
+        // A drag across cells extends the range, as it does in any grid.
+        onPointerMove: (event: UiPointerEvent) => {
+          if (event.buttons === 1 && dragging) {
+            extend({ row, column });
+          }
+        },
+        onDoubleClick: () => inputs.onOpenCell.value?.({ row, column })
       },
       Text({
         text: texts.for(key, datum),
@@ -154,6 +210,7 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
         texts.release(key);
         tones.release(key);
         chosen.release(key);
+        ranged.release(key);
       }
     }
   };
@@ -229,8 +286,14 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
         event.stopPropagation();
         resize(column, Math.max(48, Math.round(startWidth + event.x - startX)));
       },
-      onPanEnd: (event: UiPointerEvent) => event.stopPropagation(),
-      onDoubleClick: () => resize(column, columns[column].width)
+      onPanEnd: (event: UiPointerEvent) => {
+        event.stopPropagation();
+        layout.rememberWidth(columns[column].name, widths[column].value);
+      },
+      onDoubleClick: () => {
+        resize(column, columns[column].width);
+        layout.rememberWidth(columns[column].name, columns[column].width);
+      }
     });
   };
 
@@ -335,7 +398,7 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
       rowCount: result.rowCount,
       columnCount,
       rowHeight: ROW_HEIGHT,
-      columnWidth: columns.map(column => column.width),
+      columnWidth: startWidths,
       gutterWidth,
       headerHeight: HEADER_HEIGHT,
       rowOverscan: 6,
@@ -390,16 +453,27 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
     texts.close();
     tones.close();
     chosen.close();
+    ranged.close();
   });
 
   // ------------------------------------------------------------------ selection and keys
 
-  const select = (at: Selected): void => {
-    selection.next(at);
+  let dragging = false;
+  const select = (at: Selected, extending = false): void => {
+    const held = selection.value;
+    selection.next(extending && held !== null ? { anchor: held.anchor, focus: at } : { anchor: at, focus: at });
+    dragging = true;
     if (gridNode !== null) {
       focus.focus(gridNode);
     }
   };
+  const extend = (at: Selected): void => {
+    const held = selection.value;
+    if (held !== null && (held.focus.row !== at.row || held.focus.column !== at.column)) {
+      selection.next({ anchor: held.anchor, focus: at });
+    }
+  };
+  ctx.effect(selection, held => inputs.onFocusCell.value?.(held === null ? null : held.focus));
 
   const bringIntoView = (at: Selected): void => {
     const view = viewport.value;
@@ -412,39 +486,73 @@ export function ResultGrid(inputs: Inputs<ResultGridProps>, ctx: ComponentContex
     scrollX.value = bring(scrollX.value, left, sheet.widthOf(at.column), view.width, gutterWidth);
   };
 
+  /**
+   * The keys of a grid. Arrows, Page Up and Down, Home and End move the
+   * cell; with Shift they extend the range from where it started. Ctrl or
+   * ⌘ with A selects everything, with C copies the range as tab-separated
+   * text, and with Shift and C copies it with the column names first.
+   * Enter opens the value panel, and Escape collapses the range.
+   */
   const onKey = (event: UiKeyboardEvent): void => {
-    const held = selection.value ?? { row: 0, column: 0 };
+    dragging = false;
+    const held = selection.value ?? { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+    const at = held.focus;
     const page = Math.max(1, Math.floor(viewport.value.height / ROW_HEIGHT) - 2);
     const primary = event.modifiers.ctrl === true || event.modifiers.meta === true;
+    const shift = event.modifiers.shift === true;
     const moves: Record<string, Selected> = {
-      ArrowDown: { row: held.row + 1, column: held.column },
-      ArrowUp: { row: held.row - 1, column: held.column },
-      ArrowRight: { row: held.row, column: held.column + 1 },
-      ArrowLeft: { row: held.row, column: held.column - 1 },
-      PageDown: { row: held.row + page, column: held.column },
-      PageUp: { row: held.row - page, column: held.column },
-      Home: primary ? { row: 0, column: 0 } : { row: held.row, column: 0 },
-      End: primary ? { row: result.rowCount - 1, column: columnCount - 1 } : { row: held.row, column: columnCount - 1 }
+      ArrowDown: { row: at.row + 1, column: at.column },
+      ArrowUp: { row: at.row - 1, column: at.column },
+      ArrowRight: { row: at.row, column: at.column + 1 },
+      ArrowLeft: { row: at.row, column: at.column - 1 },
+      PageDown: { row: at.row + page, column: at.column },
+      PageUp: { row: at.row - page, column: at.column },
+      Home: primary ? { row: 0, column: 0 } : { row: at.row, column: 0 },
+      End: primary ? { row: result.rowCount - 1, column: columnCount - 1 } : { row: at.row, column: columnCount - 1 }
     };
     const moved = moves[event.key];
-    if (moved !== undefined) {
+    const handled = (): void => {
       event.preventDefault();
       event.stopPropagation();
+    };
+    if (moved !== undefined) {
+      handled();
       const next = {
         row: Math.max(0, Math.min(result.rowCount - 1, moved.row)),
         column: Math.max(0, Math.min(columnCount - 1, moved.column))
       };
-      selection.next(next);
+      selection.next(shift ? { anchor: held.anchor, focus: next } : { anchor: next, focus: next });
       bringIntoView(next);
       return;
     }
-    if (primary && event.key.toLowerCase() === 'c' && selection.value !== null) {
-      event.preventDefault();
-      const at = selection.value;
-      const value = workbench.view.window.value.rows[at.row]?.[at.column];
-      if (value !== undefined) {
-        shell.copyText(value === null ? '' : value);
-      }
+    const key = event.key.toLowerCase();
+    if (primary && key === 'a') {
+      handled();
+      selection.next({ anchor: { row: 0, column: 0 }, focus: { row: result.rowCount - 1, column: columnCount - 1 } });
+      return;
+    }
+    if (primary && key === 'c' && selection.value !== null) {
+      handled();
+      const box = bounds(selection.value);
+      workbench.send.copy({
+        id: result.id,
+        order: order(),
+        firstRow: box.top,
+        lastRow: box.bottom,
+        firstColumn: box.left,
+        lastColumn: box.right,
+        headers: shift
+      });
+      return;
+    }
+    if (event.key === 'Enter' && selection.value !== null) {
+      handled();
+      inputs.onOpenCell.value?.(selection.value.focus);
+      return;
+    }
+    if (event.key === 'Escape' && selection.value !== null) {
+      handled();
+      selection.next({ anchor: selection.value.focus, focus: selection.value.focus });
     }
   };
 

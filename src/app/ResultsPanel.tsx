@@ -7,9 +7,10 @@ import { internalState, ShellService, type ComponentContext, type Inputs } from 
 import { formatCount, formatMs } from './format';
 import { ICONS } from './icons';
 import { ProfilePanel } from './ProfilePanel';
+import { ValuePanel } from './ValuePanel';
 import { ResultChart } from './ResultChart';
 import { ResultGrid } from './ResultGrid';
-import { Workbench, type ResultView } from './Contract';
+import { Workbench, type Download, type ResultView } from './Contract';
 import { MONO } from './SqlEditor';
 
 /**
@@ -29,21 +30,81 @@ export function ResultsPanel(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const workbench = ctx.channel(Workbench);
   const shell = ctx.inject(ShellService);
   const view = internalState<'grid' | 'chart'>('grid');
+  /**
+   * The right-hand slot: a column's profile, or the value panel, or
+   * nothing. One at a time, because both are about what the grid has
+   * selected and two inspectors side by side would halve the grid.
+   */
   const profiling = internalState<number | null>(null);
+  const showingValue = internalState(false);
+  /** The cell the grid's keyboard is on; the value panel follows it while it is open. */
+  let focusCell: { row: number; column: number } | null = null;
 
   const result = workbench.view.result;
   const byId = result.pipe(distinctUntilChanged((a, b) => a.id === b.id));
-  ctx.effect(byId, () => (profiling.value = null));
+  ctx.effect(byId, () => {
+    profiling.value = null;
+    showingValue.value = false;
+    focusCell = null;
+  });
 
-  // A download the application worker built, handed to the shell to save.
+  const askForCell = (): void => {
+    const current = result.value;
+    if (showingValue.value && focusCell !== null) {
+      workbench.send.cell({ id: current.id, order: current.order, row: focusCell.row, column: focusCell.column });
+    }
+  };
+  const openValue = (at: { row: number; column: number }): void => {
+    focusCell = at;
+    profiling.value = null;
+    showingValue.value = true;
+    askForCell();
+  };
+  const closeValue = (): void => {
+    showingValue.value = false;
+    workbench.send.cell(null);
+  };
+  // A sort moves a different row under the cell, so the panel reads it again.
+  ctx.effect(result.pipe(distinctUntilChanged((a, b) => a.id === b.id && a.order === b.order && a.sorting === b.sorting)), view => {
+    if (!view.sorting) {
+      askForCell();
+    }
+  });
+
+  // Text the application worker built for a copy, onto the clipboard.
+  let copied = workbench.view.clipboard.value?.serial ?? 0;
+  ctx.effect(workbench.view.clipboard, clipboard => {
+    if (clipboard !== null && clipboard.serial > copied) {
+      copied = clipboard.serial;
+      shell.copyText(clipboard.text);
+    }
+  });
+
+  /**
+   * A download the application worker built, handed to the shell to save.
+   *
+   * A save picker opens only while the click that asked for it is fresh,
+   * and a large result can take longer than that to write. When the
+   * browser refuses for that reason, the file is kept and Export becomes
+   * Save: the next press is a fresh gesture, and the picker opens.
+   */
+  const unsaved = internalState<Download | null>(null);
+  const save = (download: Download): void => {
+    void shell
+      .saveFile({ name: download.name, text: download.text, mediaType: 'text/csv', accept: [{ description: 'CSV', mediaType: 'text/csv', extensions: ['.csv'] }] })
+      .then(result => {
+        unsaved.value = result.outcome === 'denied' || result.outcome === 'failed' ? download : null;
+      });
+  };
   let saved = workbench.view.download.value?.serial ?? 0;
   ctx.effect(workbench.view.download, download => {
     if (download === null || download.serial <= saved) {
       return;
     }
     saved = download.serial;
-    void shell.saveFile({ name: download.name, text: download.text, mediaType: 'text/csv', accept: [{ description: 'CSV', mediaType: 'text/csv', extensions: ['.csv'] }] });
+    save(download);
   });
+  ctx.effect(byId, () => (unsaved.value = null));
 
   const summary = result.pipe(
     map(view => {
@@ -73,15 +134,28 @@ export function ResultsPanel(_inputs: Inputs<{}>, ctx: ComponentContext) {
   );
 
   const body = combineLatest([byId, view]).pipe(
-    map(([current, showing]) => [content(current, showing, column => {
-      profiling.value = column;
-      workbench.send.profile({ id: current.id, column });
-    })])
+    map(([current, showing]) => [
+      content(current, showing, {
+        onProfile: column => {
+          showingValue.value = false;
+          profiling.value = column;
+          workbench.send.profile({ id: current.id, column });
+        },
+        onFocusCell: at => {
+          focusCell = at;
+          askForCell();
+        },
+        onOpenCell: openValue
+      })
+    ])
   );
 
-  const profile = profiling.pipe(
-    map(column =>
-      column === null
+  const profile = combineLatest([profiling, showingValue]).pipe(
+    map(([column, value]) => {
+      if (value) {
+        return [<ValuePanel key="value" onClose={closeValue} />];
+      }
+      return column === null
         ? []
         : [
             <ProfilePanel
@@ -91,8 +165,8 @@ export function ResultsPanel(_inputs: Inputs<{}>, ctx: ComponentContext) {
                 workbench.send.profile(null);
               }}
             />
-          ]
-    )
+          ];
+    })
   );
 
   const sorting = result.pipe(
@@ -116,17 +190,33 @@ export function ResultsPanel(_inputs: Inputs<{}>, ctx: ComponentContext) {
         />
         <text text={summary} fontSize={12} color="textMuted" textWrap="none" maxLines={1} textOverflow="ellipsis" flex={1} minWidth={0} live="polite" />
         {sorting}
-        <Button
-          size="small"
-          variant="outlined"
-          label="Export CSV"
-          disabled={hasRows.pipe(map(has => !has))}
-          onClick={() => workbench.send.exportCsv({ id: result.value.id })}>
-          <row gap={6} y="center">
-            <Icon {...ICONS.export} size={14} />
-            <text text="Export CSV" fontSize={12} selectable={false} />
-          </row>
-        </Button>
+        {unsaved.pipe(
+          map(pending =>
+            pending === null
+              ? [
+                  <Button
+                    key="export"
+                    size="small"
+                    variant="outlined"
+                    label="Export CSV"
+                    disabled={hasRows.pipe(map(has => !has))}
+                    onClick={() => workbench.send.exportCsv({ id: result.value.id })}>
+                    <row gap={6} y="center">
+                      <Icon {...ICONS.export} size={14} />
+                      <text text="Export CSV" fontSize={12} selectable={false} />
+                    </row>
+                  </Button>
+                ]
+              : [
+                  <Button key="save" size="small" variant="filled" tone="accent" label={`Save ${pending.name}`} onClick={() => save(pending)}>
+                    <row gap={6} y="center">
+                      <Icon {...ICONS.export} size={14} color="controlBackground" />
+                      <text text={`Save ${pending.name}`} fontSize={12} color="controlBackground" selectable={false} />
+                    </row>
+                  </Button>
+                ]
+          )
+        )}
       </row>
       {error}
       <row flex={1} minHeight={0} width={percent(100)}>
@@ -139,7 +229,13 @@ export function ResultsPanel(_inputs: Inputs<{}>, ctx: ComponentContext) {
   );
 }
 
-function content(result: ResultView, showing: 'grid' | 'chart', onProfile: (column: number) => void) {
+interface GridHandlers {
+  readonly onProfile: (column: number) => void;
+  readonly onFocusCell: (at: { row: number; column: number } | null) => void;
+  readonly onOpenCell: (at: { row: number; column: number }) => void;
+}
+
+function content(result: ResultView, showing: 'grid' | 'chart', handlers: GridHandlers) {
   if (result.id === 0) {
     return (
       <column key="empty" flex={1} x="center" y="center" gap={8} padding={24}>
@@ -159,5 +255,13 @@ function content(result: ResultView, showing: 'grid' | 'chart', onProfile: (colu
   if (showing === 'chart') {
     return <ResultChart key={`chart-${result.id}`} result={result} />;
   }
-  return <ResultGrid key={`grid-${result.id}`} result={result} onProfile={onProfile} />;
+  return (
+    <ResultGrid
+      key={`grid-${result.id}`}
+      result={result}
+      onProfile={handlers.onProfile}
+      onFocusCell={handlers.onFocusCell}
+      onOpenCell={handlers.onOpenCell}
+    />
+  );
 }

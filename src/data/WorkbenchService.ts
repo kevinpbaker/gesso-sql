@@ -5,7 +5,10 @@ import {
   NO_RESULT,
   NO_WINDOW,
   STARTING,
+  type CellDetail,
+  type CellRange,
   type ChartSeries,
+  type ClipboardText,
   type ColumnProfile,
   type Download,
   type EngineInfo,
@@ -19,6 +22,7 @@ import {
   type SchemaTableView,
   type WindowRequest
 } from '../app/Contract';
+import { tsv } from '../app/tsv';
 import { quoteIdentifier } from '../sql/complete';
 import { classify, errorOffset, errorSummary, splitStatements } from '../sql/statements';
 import { kindOf, widthOf } from './columns';
@@ -66,6 +70,10 @@ export const HISTORY_LIMIT = 200;
 export const EXPORT_LIMIT = 1_000_000;
 /** How many pages of the current result are kept. */
 const CACHED_PAGES = 96;
+/** The most of one value the value panel is sent. */
+export const CELL_LIMIT = 1_000_000;
+/** The most cells a copy puts on the clipboard; past it, Export. */
+export const COPY_LIMIT = 1_000_000;
 /** A result this small is charted row by row rather than aggregated. */
 const CHART_ROWS = 500;
 const CHART_GROUPS = 30;
@@ -82,6 +90,8 @@ export class WorkbenchService {
   readonly profile$ = new BehaviorSubject<ColumnProfile | null>(null);
   readonly download$ = new BehaviorSubject<Download | null>(null);
   readonly notice$ = new BehaviorSubject<Notice | null>(null);
+  readonly cell$ = new BehaviorSubject<CellDetail | null>(null);
+  readonly clipboard$ = new BehaviorSubject<ClipboardText | null>(null);
 
   /** The person's statements, one at a time, on the `run` connection. */
   private readonly runs = new Serial();
@@ -98,7 +108,7 @@ export class WorkbenchService {
   private pumping = false;
   private draft = '';
   private historyId = 0;
-  private serial_ = { download: 0, notice: 0 };
+  private serial_ = { download: 0, notice: 0, clipboard: 0 };
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: WorkbenchOptions) {
@@ -251,6 +261,7 @@ export class WorkbenchService {
     this.pages = new Map();
     this.wanted = null;
     this.profile$.next(null);
+    this.cell$.next(null);
     this.chart$.next(NO_CHART);
     this.result$.next({
       id,
@@ -483,6 +494,76 @@ export class WorkbenchService {
       }
     } catch (error) {
       this.say(`Could not profile ${column.name}: ${errorSummary(messageOf(error))}`, 'error');
+    }
+  }
+
+  // ---------------------------------------------------------------- one cell, and a range
+
+  /**
+   * One cell in full, for the value panel.
+   *
+   * Read again from the table rather than taken from the window, which
+   * holds each value cut to what a grid line can show; a nested value is
+   * read as JSON so the panel can lay it out.
+   */
+  async cell(request: { id: number; order: number; row: number; column: number } | null): Promise<void> {
+    const source = this.source;
+    const result = this.result$.value;
+    if (request === null || source === null || request.id !== result.id || request.order !== result.order) {
+      this.cell$.next(null);
+      return;
+    }
+    const column = source.columns[request.column];
+    if (column === undefined || request.row < 0 || request.row >= source.rowCount) {
+      return;
+    }
+    try {
+      const rows = await this.reads.run(() => source.block(request.row, 1, request.column, request.column, CELL_LIMIT + 1));
+      const current = this.result$.value;
+      if (current.id !== request.id || current.order !== request.order) {
+        return;
+      }
+      const value = rows[0]?.[0] ?? null;
+      const cut = value !== null && value.length > CELL_LIMIT;
+      this.cell$.next({
+        ...request,
+        name: column.name,
+        type: column.type,
+        value: cut ? value.slice(0, CELL_LIMIT) : value,
+        json: column.kind === 'nested' || column.type.toUpperCase() === 'JSON',
+        cut
+      });
+    } catch (error) {
+      this.say(`Could not read the cell: ${errorSummary(messageOf(error))}`, 'error');
+    }
+  }
+
+  /** Tab-separated text for a range, for the grid to put on the clipboard. */
+  async copy(request: CellRange & { headers: boolean }): Promise<void> {
+    const source = this.source;
+    const result = this.result$.value;
+    if (source === null || request.id !== result.id || request.order !== result.order) {
+      return;
+    }
+    const firstRow = Math.max(0, request.firstRow);
+    const lastRow = Math.min(source.rowCount - 1, request.lastRow);
+    const firstColumn = Math.max(0, request.firstColumn);
+    const lastColumn = Math.min(source.columns.length - 1, request.lastColumn);
+    const cells = (lastRow - firstRow + 1) * (lastColumn - firstColumn + 1);
+    if (cells > COPY_LIMIT) {
+      this.say(
+        `Copying puts up to ${COPY_LIMIT.toLocaleString('en-US')} cells on the clipboard, and this is ${cells.toLocaleString('en-US')}. Select less, or use Export CSV.`,
+        'error'
+      );
+      return;
+    }
+    try {
+      const rows = await this.reads.run(() => source.block(firstRow, lastRow - firstRow + 1, firstColumn, lastColumn, CELL_LIMIT));
+      const headers = request.headers ? source.columns.slice(firstColumn, lastColumn + 1).map(column => column.name) : undefined;
+      this.clipboard$.next({ serial: ++this.serial_.clipboard, text: tsv(rows, headers) });
+      this.say(`Copied ${cells.toLocaleString('en-US')} cells.`, 'info');
+    } catch (error) {
+      this.say(`Could not copy: ${errorSummary(messageOf(error))}`, 'error');
     }
   }
 

@@ -79,18 +79,24 @@ seconds and a heatmap of what the last frame measured.
   text's scroll in the same layout pass. Completion of tables after
   `FROM` and `JOIN`, of a table's columns after its alias and a dot, and
   of columns in scope, functions and keywords elsewhere. Tab indents,
-  Ctrl+Space asks. IME, undo, selection and the clipboard are Gesso's
-  editable text and none of them is written here.
-- **Run what you mean.** The statement under the caret, or the
-  selection. A selection of several statements runs them in order and
+  Ctrl+Space asks, Ctrl+/ comments lines, and Ctrl+Shift+F lays the SQL
+  out (each one edit, so one Undo takes it back). IME, undo, selection
+  and the clipboard are Gesso's editable text and none of them is
+  written here.
+- **Run what you mean.** The statement under the caret, the
+  selection, or with Ctrl+Shift+Enter the whole script. A selection of several statements runs them in order and
   shows the last; the first to fail stops the rest and is the one
   pointed at.
 - **A grid of any size.** Results are materialised once, in an attached
   in-memory database, and paged by `rowid`, so neither paging nor
   scrolling runs the query again. A sticky header with each column's
   type, sticky row numbers, numbers on the right, `NULL` drawn as itself,
-  columns sized from a sample of their values and resizable by dragging,
-  keyboard selection, and Ctrl/⌘+C to copy a cell.
+  columns sized from a sample of their values and resizable by dragging.
+  Select a range with Shift and the arrows or by dragging, and Ctrl/⌘+C
+  copies it as tab-separated text that pastes into a spreadsheet
+  (Ctrl/⌘+Shift+C with the column names first). Enter or a double click
+  opens the value panel: the cell in full, read again from the table,
+  with a nested value laid out as JSON, following the selection.
 - **Sort, profile, chart, export.** A sort writes one sorted copy of
   the result, so a scroll through it afterwards is as cheap as before.
   A profile is two aggregate queries. The chart sums a large result by
@@ -103,6 +109,9 @@ seconds and a heatmap of what the last frame measured.
   Preview and Summarize. Every statement run, with how long it took and
   how many rows it made; press one to run it again. History and the
   editor's text are saved to the origin private file system.
+- **It remembers where you left things.** The dividers, the side
+  panel's tab and every column width you set, in IndexedDB, by column
+  name, so tomorrow's run of the same query has the same columns.
 - **Light and dark**, following the system.
 
 ## The numbers
@@ -159,6 +168,9 @@ channel per cell, and released as cells leave the window.
   reload; tables do not. A loaded file is read into memory, and the
   file is still on the disk it came from.
 - **One result at a time.** No result tabs, no pinning.
+- **No progress percentage.** DuckDB-WASM reports progress only for a
+  statement run in one call, and statements here run in steps so Cancel
+  can interrupt them. The timer counts instead.
 - **Memory is the browser's.** A `SELECT *` over a large table is a
   second copy of it, and a sort is a third. DuckDB-WASM's ceiling is the
   tab's, a few gigabytes; the sample offers up to ten million rows.
@@ -176,7 +188,7 @@ channel per cell, and released as cells leave the window.
 | `src/data/`         | The application worker: the service, result sources, DuckDB, OPFS        |
 | `src/app/`          | The render worker: every component, and the channel contract            |
 | `src/main.ts`       | The main thread, all of it                                              |
-| `scripts/tour.ts`   | Headless Chrome through every feature, with a screenshot at each stop   |
+| `scripts/tour*.ts`  | Headless Chrome through every feature, with a screenshot at each stop   |
 | `GESSO-ISSUES.md`   | What building this found in Gesso, and what happened to each            |
 
 ### Tests

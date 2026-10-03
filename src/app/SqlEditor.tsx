@@ -4,6 +4,7 @@ import { editorFor, percent, type UiKeyboardEvent, type UiNode, type UiSelection
 import { EditingService, FocusService, internalState, type ComponentContext, type Inputs } from 'gesso-framework';
 
 import { complete, type Completion, type CompletionResult } from '../sql/complete';
+import { formatSql, toggleComment, type Edit } from '../sql/editing';
 import { editorSpans } from '../sql/highlight';
 import { Workbench } from './Contract';
 import type { Session } from './session';
@@ -152,7 +153,27 @@ export function SqlEditor(inputs: Inputs<SqlEditorProps>, ctx: ComponentContext)
       event.preventDefault();
       event.stopPropagation();
       close();
-      session.runCurrent();
+      if (event.modifiers.shift === true) {
+        session.runAll();
+      } else {
+        session.runCurrent();
+      }
+      return;
+    }
+    // ⌘/ or Ctrl+/ comments the lines, and ⌘⇧F or Ctrl+Shift+F lays the
+    // SQL out; each is one edit, so one Undo takes it back.
+    if (primary && event.key === '/') {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      applyEdit(toggleComment(session.text.value, session.selection.value.start, session.selection.value.end));
+      return;
+    }
+    if (primary && event.modifiers.shift === true && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      applyEdit(formatSql(session.text.value, session.selection.value.start, session.selection.value.end));
       return;
     }
     if (event.modifiers.ctrl === true && event.key === ' ') {
@@ -173,6 +194,18 @@ export function SqlEditor(inputs: Inputs<SqlEditorProps>, ctx: ComponentContext)
         session.text.value = model.text;
       }
     }
+  };
+
+  const applyEdit = (change: Edit | null): void => {
+    const node = field.value;
+    if (change === null || node === null) {
+      return;
+    }
+    const model = editorFor(node);
+    model.replaceRange(change.from, change.to, change.text);
+    model.select(change.selectFrom, change.selectTo);
+    session.text.value = model.text;
+    session.selection.value = { start: change.selectFrom, end: change.selectTo };
   };
 
   const onInput = (event: UiTextChangeEvent): void => {

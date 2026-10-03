@@ -27,6 +27,8 @@ export interface Session {
   readonly error: Observable<Range | null>;
   /** Runs the selection if there is one, or the statement under the caret. */
   runCurrent(): void;
+  /** Runs every statement in the editor, in order, showing the last. */
+  runAll(): void;
   /** Runs SQL that is not in the editor: a table's preview, a statement from history. */
   runSql(sql: string): void;
   /** Puts text into the editor, replacing what is there. */
@@ -122,6 +124,11 @@ export function session(ctx: ComponentContext): Session {
       const statement = current();
       if (statement !== null && statement.text.trim() !== '') {
         send(statement.text, statement.start);
+      }
+    },
+    runAll: () => {
+      if (text.value.trim() !== '') {
+        send(text.value, 0);
       }
     },
     runSql: (sql: string) => send(sql, -1),

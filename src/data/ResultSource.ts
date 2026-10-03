@@ -30,6 +30,8 @@ export interface ResultSource {
   readonly columns: readonly ResultColumn[];
   /** Display strings for `count` rows from `first`, in the current order. */
   page(first: number, count: number): Promise<(string | null)[][]>;
+  /** A block of rows and columns in full, uncut; for the clipboard and the value panel. */
+  block(first: number, count: number, firstColumn: number, lastColumn: number, limit: number): Promise<(string | null)[][]>;
   sort(sort: ResultSort | null): Promise<void>;
   /** A relation the result can be queried as, for the chart and the profile; null when it has none. */
   readonly relation: string | null;
@@ -58,6 +60,21 @@ export class TableSource implements ResultSource {
       return [];
     }
     const list = this.columns.map(column => `left(${quoteIdentifier(column.name)}::VARCHAR, ${DISPLAY_LIMIT})`).join(', ');
+    const rows = await this.db.query(
+      `SELECT ${list} FROM ${this.relation} WHERE rowid >= ${first} AND rowid < ${first + count} ORDER BY rowid`,
+      'read'
+    );
+    return rows.rows.map(row => row.map(value => (value === null ? null : String(value))));
+  }
+
+  async block(first: number, count: number, firstColumn: number, lastColumn: number, limit: number): Promise<(string | null)[][]> {
+    // Nested values as JSON, which is what a person pasting them or
+    // reading them in the value panel wants, rather than DuckDB's own
+    // `{'a': 1}` spelling of a struct.
+    const list = this.columns
+      .slice(firstColumn, lastColumn + 1)
+      .map(column => `left(${column.kind === 'nested' ? `to_json(${quoteIdentifier(column.name)})` : quoteIdentifier(column.name)}::VARCHAR, ${limit})`)
+      .join(', ');
     const rows = await this.db.query(
       `SELECT ${list} FROM ${this.relation} WHERE rowid >= ${first} AND rowid < ${first + count} ORDER BY rowid`,
       'read'
@@ -116,6 +133,10 @@ export class MemorySource implements ResultSource {
 
   async page(first: number, count: number): Promise<(string | null)[][]> {
     return this.order.slice(first, first + count);
+  }
+
+  async block(first: number, count: number, firstColumn: number, lastColumn: number): Promise<(string | null)[][]> {
+    return this.order.slice(first, first + count).map(row => row.slice(firstColumn, lastColumn + 1));
   }
 
   async sort(sort: ResultSort | null): Promise<void> {

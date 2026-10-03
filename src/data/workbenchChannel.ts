@@ -24,7 +24,9 @@ export function workbenchChannel(service: WorkbenchService) {
         chart: service.chart$,
         profile: service.profile$,
         download: service.download$,
-        notice: service.notice$
+        notice: service.notice$,
+        cell: service.cell$,
+        clipboard: service.clipboard$
       },
       commands: {
         run: (request: { sql: string; at: number }) => void service.run(request),
@@ -37,7 +39,9 @@ export function workbenchChannel(service: WorkbenchService) {
         clearHistory: () => service.clearHistory(),
         chart: (request: Parameters<WorkbenchService['chart']>[0]) => void service.chart(request),
         profile: (request: Parameters<WorkbenchService['profile']>[0]) => void service.profile(request),
-        exportCsv: (request: { id: number }) => void service.exportCsv(request)
+        exportCsv: (request: { id: number }) => void service.exportCsv(request),
+        cell: (request: Parameters<WorkbenchService['cell']>[0]) => void service.cell(request),
+        copy: (request: Parameters<WorkbenchService['copy']>[0]) => void service.copy(request)
       }
     }
   };

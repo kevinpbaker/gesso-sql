@@ -249,3 +249,49 @@ describe('the sample', () => {
     expect(Number(window.rows[0][0])).toBeLessThanOrEqual(21);
   });
 });
+
+describe('one cell, and a range', () => {
+  it('reads a cell in full, with a nested value as JSON', async () => {
+    const service = await started();
+    await ran(service, "SELECT repeat('x', 1000) AS long, {'a': 1, 'b': [2, 3]} AS nested, NULL::INTEGER AS empty");
+    const { id, order } = service.result$.value;
+    await service.cell({ id, order, row: 0, column: 0 });
+    expect(service.cell$.value).toMatchObject({ name: 'long', cut: false, json: false });
+    expect(service.cell$.value?.value).toHaveLength(1000);
+    await service.cell({ id, order, row: 0, column: 1 });
+    expect(service.cell$.value).toMatchObject({ json: true });
+    expect(JSON.parse(service.cell$.value!.value!)).toEqual({ a: 1, b: [2, 3] });
+    await service.cell({ id, order, row: 0, column: 2 });
+    expect(service.cell$.value?.value).toBeNull();
+    await service.cell(null);
+    expect(service.cell$.value).toBeNull();
+  });
+
+  it('reads the cell under a sort from the sorted order', async () => {
+    const service = await started();
+    await ran(service, 'SELECT * FROM (VALUES (1), (3), (2)) t(n)');
+    const { id } = service.result$.value;
+    await service.sort({ id, sort: { column: 0, direction: 'descending' } });
+    await service.cell({ id, order: service.result$.value.order, row: 0, column: 0 });
+    expect(service.cell$.value?.value).toBe('3');
+  });
+
+  it('copies a range as tab-separated text, with column names when asked', async () => {
+    const service = await started();
+    await ran(service, "SELECT * FROM (VALUES (1, 'a\tb', NULL), (2, 'say \"hi\"', 'z')) t(n, s, m)");
+    const { id, order } = service.result$.value;
+    await service.copy({ id, order, firstRow: 0, lastRow: 1, firstColumn: 0, lastColumn: 2, headers: true });
+    expect(service.clipboard$.value?.text).toBe('n\ts\tm\n1\t"a\tb"\t\n2\t"say ""hi"""\tz');
+    await service.copy({ id, order, firstRow: 1, lastRow: 1, firstColumn: 1, lastColumn: 1, headers: false });
+    expect(service.clipboard$.value?.text).toBe('"say ""hi"""');
+  });
+
+  it('turns down a copy too large for the clipboard, and says to export instead', async () => {
+    const service = await started();
+    await ran(service, 'SELECT * FROM range(400000) a(i), range(3) b(j)');
+    const { id, order } = service.result$.value;
+    await service.copy({ id, order, firstRow: 0, lastRow: 1_199_999, firstColumn: 0, lastColumn: 1, headers: false });
+    expect(service.notice$.value).toMatchObject({ tone: 'error' });
+    expect(service.notice$.value?.text).toMatch(/Export CSV/);
+  });
+});

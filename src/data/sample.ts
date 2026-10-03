@@ -93,6 +93,8 @@ FROM base`
 /** What the editor holds the first time it is opened. */
 export const WELCOME = `-- Welcome to Gesso SQL: DuckDB, in your browser, behind an interface that never waits for it.
 -- The trips table is generated on start. Put the caret in a query and press Ctrl+Enter (⌘+Enter on a Mac).
+-- Ctrl+Shift+Enter runs the whole script, Ctrl+/ comments lines, and Ctrl+Shift+F lays the SQL out.
+-- In the grid: Shift+arrows select a range, Ctrl+C copies it (Ctrl+Shift+C with column names), Enter shows a value in full.
 
 -- Busiest pickup zones, with average fare and tip rate.
 SELECT z.borough, z.zone, count(*) AS trips,
