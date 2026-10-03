@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "lib": ["ES2023", "DOM"],
+    /* `node` is for the specs: one of them reads its own directory. */
+    "types": ["vite/client", "node", "@webgpu/types"],
+
+    /* The packages ship `exports` maps, so this is the line that has to be right. */
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "strict": true,
+    /* Gesso is linked from ../gesso as TypeScript source; these match its own settings. */
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "allowArbitraryExtensions": true,
+    "noEmit": true,
+
+    /* The two lines that let you write elements as markup. */
+    "jsx": "react-jsx",
+    "jsxImportSource": "gesso-framework"
+  },
+  "include": ["src"]
+}

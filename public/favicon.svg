@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Gesso">
+  <defs>
+    <clipPath id="gesso-canvas"><rect width="64" height="64" rx="12"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="#BE9A6E"/>
+  <path clip-path="url(#gesso-canvas)" fill="#F7F3EA"
+        d="M0 40H16V28H32V16H48V4H64V24H48V36H32V48H16V60H0Z"/>
+</svg>

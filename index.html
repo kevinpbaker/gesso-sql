@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A SQL workbench: DuckDB in your browser, behind an interface drawn by Gesso that never waits for it." />
+    <title>Gesso SQL</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      /*
+        The canvas is sized to its host, so the host needs a size. That
+        is the whole of the CSS this application has: everything else is
+        painted, not styled. `/proof` adds a strip along the top, which
+        brings its own styles; the column layout is here for it.
+      */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font: 12px/1.4 system-ui, sans-serif;
+        background: #f6f6f7;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #1b1c1f;
+        }
+      }
+      #app {
+        flex: 1;
+        min-height: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
