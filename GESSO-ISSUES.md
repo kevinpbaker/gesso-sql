@@ -97,18 +97,14 @@ content. The editor and the results panel did this at first, and the
 symptom was the same as issue 4. The fix in the app was `height: 100%`.
 The engine's `explain()` said so plainly once asked.
 
-## Open questions
+## Decided
 
-### Can a command carry bytes?
+### A command may carry bytes
 
-`open(file)` sends a file's bytes as a `Uint8Array`. At runtime that
-works: a command's argument is structured-cloned, and
-`WorkbenchApp.spec.tsx` drives it through a real port. But
-`gesso-vite-plugin`'s channel-schema pass warns that the field "is not
-plain data and cannot cross a channel", which is true of a view key and
-not of a command. gesso-sheets base64-encodes instead, which for a
-500 MB Parquet file is a third larger and an encoding pass on the render
-thread. Whether commands may carry binary is a framework decision, so it
-is left as a question rather than changed: either the rule allows typed
-arrays in commands and the schema describes them (`contentEncoding`),
-or the workbench moves to base64.
+`open(file)` sends a dropped file's bytes as a `Uint8Array`, which a
+command's structured clone carries as itself, but `gesso-vite-plugin`
+warned that it "cannot cross a channel". Decided that commands may carry
+bytes: the plugin now describes them as a base64 string tagged
+`x-gesso-binary` and does not warn, the agent surface decodes an agent's
+base64 back into that type, and bytes in a view key are still a
+warning. Commit `88d93b3`.
