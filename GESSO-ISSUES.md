@@ -89,11 +89,12 @@ The app had its own half of this: its root provided `theme` without
 provides the theme's body style beside the theme, as Gesso's appearance
 guide shows.
 
-**Still open, a decision:** `DataTable` sets its row colour the same way,
-and its large-table recipe tells applications not to colour cells
-because they inherit the row's selection colour. They don't. Either
-`color` cascades through the text style (a reversal of the documented
-design), or `DataTable` and its recipe change.
+`DataTable` set its row colour the same way, and its large-table recipe
+told applications not to colour cells because they would inherit it.
+Decided: keep the rule that `color` does not cascade, and change the
+table. A column's `cell` now receives the colour as a third argument and
+binds it on its text; the DataTable page, the recipe and both live
+examples say so. Commit `23b26f6`.
 
 ## Already fixed upstream, not yet released
 
