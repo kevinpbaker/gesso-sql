@@ -72,9 +72,32 @@ unchanged. WebGPU already applied scroll in JavaScript. Commit
 `303e85a`. Spec: `PreciseContext.spec.ts`, "draws a row at the bottom of
 a huge scroll where it belongs".
 
+### 5. A Tree's labels were black, in a dark theme too
+
+**What:** the schema sidebar's table and column names were nearly
+invisible in dark mode. `Tree` set `color` on each row and left its
+label and arrow to inherit it, but `color` does not cascade from a
+parent node by design, so they drew in the text style's colour: black,
+whatever the theme.
+
+**Fix:** the Tree binds the colour on its two texts. Commit `819df79`.
+Spec: `Data.spec.ts`, "draws its labels in the control colours of the
+theme it is under, and the chosen one in the selection colour".
+
+The app had its own half of this: its root provided `theme` without
+`textStyle`, so any text naming no colour fell back to black. It now
+provides the theme's body style beside the theme, as Gesso's appearance
+guide shows.
+
+**Still open, a decision:** `DataTable` sets its row colour the same way,
+and its large-table recipe tells applications not to colour cells
+because they inherit the row's selection colour. They don't. Either
+`color` cascades through the text style (a reversal of the documented
+design), or `DataTable` and its recipe change.
+
 ## Already fixed upstream, not yet released
 
-### 4. A percentage inside a flexed item resolved against its content
+### 6. A percentage inside a flexed item resolved against its content
 
 **What:** in the published 0.4.2, a nested `SplitPane` under a `flex: 1`
 box sized its first pane from its content instead of the fraction: 40%
@@ -94,7 +117,7 @@ workbench links `../gesso` rather than using the published packages.
 A `SplitPane` pane is a `Box`, which stacks its children rather than
 flexing them, so a panel root with `flex: 1` inside one is sized by its
 content. The editor and the results panel did this at first, and the
-symptom was the same as issue 4. The fix in the app was `height: 100%`.
+symptom was the same as issue 6. The fix in the app was `height: 100%`.
 The engine's `explain()` said so plainly once asked.
 
 ## Decided

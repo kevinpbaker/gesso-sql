@@ -34,7 +34,16 @@ export function AppRoot(_inputs: Inputs<{}>, ctx: ComponentContext) {
   const shell = ctx.inject(ShellService);
   const theme = shell.colorScheme.pipe(map(scheme => (scheme === 'dark' ? darkTheme : lightTheme)));
   return (
-    <column width={percent(100)} height={percent(100)} theme={theme} backgroundColor="background">
+    <column
+      width={percent(100)}
+      height={percent(100)}
+      theme={theme}
+      // With the theme, its body style: text that names no colour takes
+      // it from the type scale in the environment, not from the theme, so
+      // a root that provided only the theme left such text black in the
+      // dark theme too.
+      textStyle={theme.pipe(map(value => value.typography.body))}
+      backgroundColor="background">
       {createComponent(RouterOutlet)}
     </column>
   );
