@@ -34,9 +34,6 @@ pnpm install
 pnpm dev
 ```
 
-Gesso SQL builds on the Gesso checkout beside it (`../gesso`); see
-[building against Gesso](#building-against-gesso).
-
 Open the address Vite prints. DuckDB starts and generates five million
 taxi trips in a few seconds: pickup and dropoff times, zones, distance,
 fare, tip and payment. They are made by DuckDB itself from `range()`
@@ -210,12 +207,14 @@ pnpm tour /tmp      # in another: screenshots in /tmp
 
 ### Building against Gesso
 
-`pnpm-workspace.yaml` links every `gesso-*` package to `../gesso`, so
-the workbench runs on that checkout's source. It needs fixes made since
-Gesso 0.4.2, listed in `GESSO-ISSUES.md`. When a release carries them,
-the overrides can go and the published packages come back.
+The workbench uses the published Gesso packages, 0.5.0 or later, which
+carry the fixes building it found (`GESSO-ISSUES.md`). To try an engine
+change before it is released, override the `gesso-*` packages in
+`pnpm-workspace.yaml` with links to `../gesso/packages/*`, as the issue
+tracker does.
 
 ### Deploying
 
-`vercel.json` is set up as the other Gesso apps' are. A deploy needs the
-published Gesso packages, so it waits on that release.
+`vercel.json` is set up as the other Gesso apps' are: a frozen-lockfile
+install, `pnpm build`, and `dist` served with every path falling back to
+`index.html` so `/proof` loads. Nothing else is needed.

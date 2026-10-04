@@ -39,7 +39,10 @@ describe('ResultsPanel, the keyboard in the grid', () => {
     const { ui, run, dispose } = await mount(ResultsPanel, { width: 900, height: 500 });
     const { flush } = await import('./harness');
     const copied: string[] = [];
-    ui.runtime.services.get(ShellService).copyText = (text: string) => void copied.push(text);
+    ui.runtime.services.get(ShellService).copyText = async (text: string) => {
+      copied.push(text);
+      return true;
+    };
     await run("SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) t(n, word)");
 
     // Pressed where it is, through the hit tester, as a pointer would.

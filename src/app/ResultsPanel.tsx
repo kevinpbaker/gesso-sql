@@ -191,6 +191,8 @@ export function ResultsPanel(_inputs: Inputs<{}>, ctx: ComponentContext) {
         <text text={summary} fontSize={12} color="textMuted" textWrap="none" maxLines={1} textOverflow="ellipsis" flex={1} minWidth={0} live="polite" />
         {sorting}
         {unsaved.pipe(
+          // Set again to null by every new result; only a real change rebuilds the button.
+          distinctUntilChanged(),
           map(pending =>
             pending === null
               ? [

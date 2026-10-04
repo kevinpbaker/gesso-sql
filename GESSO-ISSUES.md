@@ -3,15 +3,13 @@
 Problems in Gesso, or traps in using it, found by building on it, and
 what happened to each.
 
-**Where the fixes are:** committed to `main` in `../gesso`, one commit
-per fix. Not pushed or released. Each has a spec that fails without it,
+**Where the fixes are:** released in Gesso 0.5.0, one commit per fix. Each has a spec that fails without it,
 a changeset, and docs where behavior changed, and was checked with
 Gesso's format, lint, typecheck, API report, docs check and the full
 test suite (4,465 tests at the second fix).
 
-**How the workbench uses them:** `pnpm-workspace.yaml` overrides every
-`gesso-*` package with a link to `../gesso/packages/*`. Once a release
-carries these fixes the overrides can go.
+**How the workbench uses them:** from the registry, `^0.5.0`. It linked
+`../gesso` until that release.
 
 ## Fixed
 
@@ -96,7 +94,7 @@ table. A column's `cell` now receives the colour as a third argument and
 binds it on its text; the DataTable page, the recipe and both live
 examples say so. Commit `23b26f6`.
 
-## Already fixed upstream, not yet released
+## Fixed upstream before this work, released in 0.5.0
 
 ### 6. A percentage inside a flexed item resolved against its content
 
@@ -108,8 +106,8 @@ the result grid inside it was laid out at its full content height —
 memory.
 
 **Status:** Gesso's `main` already lays this out correctly; the change is
-in the layout engine's memoisation since 0.4.2. It is the reason the
-workbench links `../gesso` rather than using the published packages.
+in the layout engine's memoisation since 0.4.2. It is why the workbench
+needed 0.5.0 rather than 0.4.2.
 
 ## Traps, not bugs
 

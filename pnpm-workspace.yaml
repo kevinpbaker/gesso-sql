@@ -1,15 +1,14 @@
-# Gesso comes from the checkout beside this one.
+# The engine is exempt from the publish-age cooldown.
 #
-# The workbench is built on Gesso's working tree rather than its last
-# release, because it needs engine fixes made since 0.4.2 — the first
-# was a percentage height inside a flexed item, which left a nested
-# SplitPane sized to its content and the result grid mounting rows
-# without end. Switch these back to registry versions once a release
-# carries what is used here.
-overrides:
-  gesso-core: link:../gesso/packages/core
-  gesso-framework: link:../gesso/packages/framework
-  gesso-components: link:../gesso/packages/components
-  gesso-testing: link:../gesso/packages/testing
-  gesso-devtools: link:../gesso/packages/devtools
-  gesso-vite-plugin: link:../gesso/packages/vite-plugin
+# pnpm will not install anything published in the last day — a good
+# rule, and malware is usually found inside it. It is the wrong rule
+# for these, which are Gesso's own packages, released from the checkout
+# beside this one so an engine fix can reach this app the day it is
+# made. The exemption is by name and only these names.
+minimumReleaseAgeExclude:
+  - gesso-components
+  - gesso-core
+  - gesso-devtools
+  - gesso-framework
+  - gesso-testing
+  - gesso-vite-plugin
