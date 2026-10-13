@@ -77,7 +77,7 @@ describe('ResultsPanel, the keyboard in the grid', () => {
     shell.saveFile = async options => {
       attempts.push(options.name);
       const outcome = refuse ? 'denied' : 'ok';
-      return { outcome, files: [], saved: refuse ? null : { name: options.name, handle: null, via: 'download' }, recent: [], error: null };
+      return { outcome, files: [], directory: null, saved: refuse ? null : { name: options.name, handle: null, via: 'download' }, recent: [], error: null };
     };
     await run('SELECT 1 AS one');
     ui.fireEvent.click(ui.getByRole('button', { name: 'Export CSV' }));
